@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>순천향대 컴퓨터공학과 Graduation Simulator</title>
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome 아이콘 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen">
+
+<!-- 상단 헤더 영역 -->
+<header class="bg-indigo-700 text-white shadow-lg py-5 mb-8">
+    <div class="max-w-5xl mx-auto px-4 flex justify-between items-center">
+        <!-- 1. 좌측: 학사모 아이콘 + 서비스명 (졸업각) -->
+        <div class="flex items-center gap-3">
+            <span class="text-3xl">🎓</span>
+            <div>
+                <h1 class="text-2xl font-extrabold tracking-tight">졸업각</h1>
+                <p class="text-indigo-200 text-xs mt-0.5">졸업 가능성 시뮬레이터</p>
+            </div>
+        </div>
+
+        <!-- 2. 우측: 개인정보란 (학과 / 실명 / 학번) + 로그아웃 버튼 -->
+        <div class="flex items-center gap-4">
+            <!-- 개인정보 카드 -->
+            <div class="bg-indigo-800/60 border border-indigo-500/30 rounded-xl px-4 py-2 text-right shadow-inner">
+                <!-- 소속 학과 -->
+                <div class="text-xs text-indigo-200 font-medium">
+                    순천향대학교 {{ major }}
+                </div>
+                <!-- 학생 실명 및 학번 -->
+                <div class="text-sm font-semibold mt-0.5 flex items-center justify-end gap-1.5">
+                    <i class="fa-solid fa-user text-xs text-indigo-300"></i>
+                    <span>{{ name }}님</span>
+                    <span class="text-indigo-300 text-xs">({{ student_id }})</span>
+                </div>
+            </div>
+
+            <!-- 로그아웃 버튼 -->
+            <a href="{{ url_for('auth.logout') }}" class="bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold px-3.5 py-2 rounded-lg transition-colors shadow">
+                로그아웃
+            </a>
+        </div>
+    </div>
+</header>
+
+<main class="max-w-5xl mx-auto px-4 pb-16">
+
+    <!-- 검색 및 컨트롤 영역 -->
+    <div class="bg-white rounded-xl shadow-md p-6 mb-8 border border-slate-100">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+            <div>
+                <label class="block text-sm font-bold text-slate-700 mb-2">학번 (Student ID)</label>
+                <input type="text" id="studentId" value="{{ student_id }}" readonly
+                    class="w-full border border-slate-300 bg-slate-100 text-slate-600 rounded-lg px-4 py-2 
+                    focus:outline-none cursor-not-allowed">
+            </div>
+            <div>
+                <label class="block text-sm font-bold text-slate-700 mb-2">진단 기준 학기</label>
+                <select id="semester" class="w-full border border-slate-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                    <option value="1">1학기 진단 (2학기 개설 과목 누락 검사)</option>
+                    <option value="2">2학기 진단 (1학기 개설 과목 누락 검사)</option>
+                </select>
+            </div>
+            <div>
+                <button onclick="runDiagnosis()" 
+                    class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-4 rounded-lg shadow transition duration-200 flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-calculator"></i> 졸업 가능성 진단하기
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 로딩 스피너 -->
+    <div id="loading" class="hidden text-center py-12">
+        <div class="inline-block animate-spin rounded-full h-10 w-10 border-4 border-indigo-600 border-t-transparent"></div>
+        <p class="mt-3 text-slate-500 font-medium">졸업 요건 분석 중...</p>
+    </div>
+
+    <!-- 진단 결과 출력 영역 -->
+    <div id="resultSection" class="hidden space-y-8">
+
+        <!-- 종합 판정 상태 카드 -->
+        <div id="statusCard" class="p-6 rounded-xl shadow-md border text-center transition-all">
+            <p class="text-sm font-bold uppercase tracking-wider text-slate-500 mb-1">종합 진단 결과</p>
+            <h2 id="statusTitle" class="text-3xl font-extrabold mb-2"></h2>
+            <p id="statusDesc" class="text-slate-600 font-medium"></p>
+        </div>
+
+        <!-- 🚨 연간 개설 주기 관련 경고 카드 (존재할 때만 표시) -->
+        <div id="warningContainer" class="hidden">
+            <div class="bg-amber-50 border-l-4 border-amber-500 p-5 rounded-r-xl shadow-sm">
+                <div class="flex items-center gap-3 mb-3">
+                    <span class="text-2xl text-amber-500"><i class="fa-solid fa-triangle-exclamation"></i></span>
+                    <h3 class="text-lg font-bold text-amber-800">개설 주기 관련 졸업 연기 주의 경고</h3>
+                </div>
+                <div id="warningList" class="space-y-2 pl-9"></div>
+            </div>
+        </div>
+
+        <!-- 학점 충족현황 Progress Bar 영역 -->
+        <div class="bg-white rounded-xl shadow-md p-6 border border-slate-100">
+            <h3 class="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
+                <i class="fa-solid fa-chart-bar text-indigo-600"></i> 영역별 이수 학점 현황
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6" id="progressGrid">
+                <!-- JS로 동적 생성 -->
+            </div>
+        </div>
+
+        <!-- 미이수 필수 과목 리스트 -->
+        <div class="bg-white rounded-xl shadow-md p-6 border border-slate-100">
+            <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                <i class="fa-solid fa-book-bookmark text-rose-500"></i> 미이수 필수/학부기초 과목 목록
+            </h3>
+            <div id="missingCoursesList" class="flex flex-wrap gap-2">
+                <!-- JS로 동적 생성 -->
+            </div>
+        </div>
+
+    </div>
+
+</main>
+
+<!-- 과목 상세 내역 팝업 모달 -->
+<div id="courseModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden transition-all">
+        <!-- 모달 헤더 -->
+        <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+            <h3 id="modalTitle" class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                <i class="fa-solid fa-list-check text-indigo-600"></i> 과목 이수 현황
+            </h3>
+            <button onclick="closeCourseModal()" class="text-slate-400 hover:text-slate-600 p-2 rounded-lg text-lg">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <!-- 모달 본문 (스크롤 영역) -->
+        <div class="p-6 space-y-6 overflow-y-auto">
+            <!-- 🚨 미이수 / 부족 과목 영역 (부족한 과목이 있을 때만 표출) -->
+            <div id="modalRemainingSection" class="hidden bg-rose-50 border border-rose-200 rounded-xl p-4">
+                <h4 class="text-sm font-bold text-rose-700 mb-3 flex items-center gap-1.5">
+                    <i class="fa-solid fa-circle-exclamation"></i> 미이수 / 추가 수강 필요 과목
+                </h4>
+                <div id="modalRemainingList" class="grid grid-cols-1 md:grid-cols-2 gap-2"></div>
+                {% include 'kmooc_component.html' %}
+            </div>
+
+            <!-- ✅ 이수한 과목 영역 -->
+            <div>
+                <h4 class="text-sm font-bold text-emerald-700 mb-3 flex items-center gap-1.5">
+                    <i class="fa-solid fa-circle-check"></i> 이수 완료된 과목
+                </h4>
+                <div id="modalCompletedList" class="grid grid-cols-1 md:grid-cols-2 gap-2"></div>
+            </div>
+        </div>
+
+        <!-- 모달 하단 -->
+        <div class="p-4 border-t border-slate-100 bg-slate-50 text-right">
+            <button onclick="closeCourseModal()" class="bg-slate-700 hover:bg-slate-800 text-white text-sm font-bold px-5 py-2.5 rounded-lg shadow">
+                닫기
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- 스크립트 연결 영역 (Flask url_for 활용) -->
+<script src="{{ url_for('static', filename='js/modal.js') }}"></script>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script src="{{ url_for('static', filename='js/kmooc.js') }}"></script>
+
+</body>
+</html>
