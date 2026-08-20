@@ -1,0 +1,1 @@
+Graduation analysis tool that determines whether a student can graduate in the current semester. It analyzes completed and remaining requirements, identifies any deficiencies, and clearly shows what is still needed for graduation
